@@ -1,12 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import Filters from './components/Filters.jsx'
-import MapView from './components/MapView.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import AssetTable from './components/AssetTable.jsx'
 import AssetForm from './components/AssetForm.jsx'
 import Login from './components/Login.jsx'
 import UserAdmin from './components/UserAdmin.jsx'
-import LiveView from './components/LiveView.jsx'
+import { DialogHost, alertDialog, confirmDialog } from './lib/dialogs.jsx'
+
+// Leaflet-heavy views load on demand — keeps the initial bundle small.
+const MapView = lazy(() => import('./components/MapView.jsx'))
+const LiveView = lazy(() => import('./components/LiveView.jsx'))
+
+function ViewLoading() {
+  return <div className="empty"><span className="spinner" /> Loading view…</div>
+}
 import { isConfigured } from './lib/supabaseClient.js'
 import { listAssets, saveAsset, deleteAsset, clearAll } from './lib/storage.js'
 import {
@@ -148,21 +155,28 @@ export default function App() {
       setEditing(null)
       notify(data.id ? 'Asset updated ✓' : 'Asset added ✓')
     } catch (e) {
-      alert('Could not save: ' + e.message)
+      alertDialog({ title: 'Could not save', message: e.message })
     }
   }
   async function handleDelete(id) {
-    if (!confirm('Delete this asset permanently?')) return
+    const ok = await confirmDialog({
+      title: 'Delete asset', danger: true, okLabel: 'Delete',
+      message: 'Delete this asset permanently? This cannot be undone.',
+    })
+    if (!ok) return
     try { await deleteAsset(id); await reload(); setEditing(null); notify('Asset deleted', 'warn') }
-    catch (e) { alert('Could not delete: ' + e.message) }
+    catch (e) { alertDialog({ title: 'Could not delete', message: e.message }) }
   }
   async function handleLoadSample() {
-    if (assets.length && !confirm('Add 8 sample assets to the register?')) return
+    if (assets.length && !(await confirmDialog({
+      title: 'Load sample data',
+      message: 'Add 8 sample assets to the register?', okLabel: 'Add samples',
+    }))) return
     try {
       for (const a of SAMPLE_ASSETS) await saveAsset({ ...a, createdByName: user.name, createdByRole: user.role })
       await reload()
       notify(`${SAMPLE_ASSETS.length} sample assets added ✓`)
-    } catch (e) { alert('Could not add samples: ' + e.message) }
+    } catch (e) { alertDialog({ title: 'Could not add samples', message: e.message }) }
   }
   function handleExportCSV() {
     download('howrah-assets.csv', toCSV(filtered), 'text/csv')
@@ -208,8 +222,11 @@ export default function App() {
           const nm = (r.name || '').trim()
           return nm && !nm.toUpperCase().startsWith('EXAMPLE')
         })
-        if (!rows.length) { alert('No data rows found (blank and EXAMPLE rows are ignored).'); return }
-        if (!confirm(`Add ${rows.length} asset(s) to the register?`)) return
+        if (!rows.length) { alertDialog({ title: 'Nothing to import', message: 'No data rows found (blank and EXAMPLE rows are ignored).' }); return }
+        if (!(await confirmDialog({
+          title: 'Import assets',
+          message: `Add ${rows.length} asset(s) to the register?`, okLabel: 'Import',
+        }))) return
         const lvl = lockedLevel(user)
         let ok = 0, fail = 0
         for (const r of rows) {
@@ -222,19 +239,22 @@ export default function App() {
           try { await saveAsset(row); ok++ } catch { fail++ }
         }
         await reload()
-        if (fail) alert(`Imported ${ok} asset(s), ${fail} failed (check tier/jurisdiction & required fields).`)
+        if (fail) alertDialog({ title: 'Import finished', message: `Imported ${ok} asset(s), ${fail} failed (check tier/jurisdiction & required fields).` })
         else notify(`Imported ${ok} asset(s) ✓`)
       } catch (err) {
-        alert('Could not parse file: ' + err.message)
+        alertDialog({ title: 'Could not parse file', message: err.message })
       }
     }
     reader.readAsText(file)
     e.target.value = ''
   }
   async function handleClearAll() {
-    if (!confirm('Erase ALL assets you can access? Export a backup first if needed.')) return
+    if (!(await confirmDialog({
+      title: 'Erase all data', danger: true, okLabel: 'Erase everything',
+      message: 'Erase ALL assets you can access? Export a backup first if needed. This cannot be undone.',
+    }))) return
     try { await clearAll(); await reload(); notify('All data erased', 'warn') }
-    catch (e) { alert('Could not erase: ' + e.message) }
+    catch (e) { alertDialog({ title: 'Could not erase', message: e.message }) }
   }
   async function handleLogout() {
     await logout(); setUser(null); setView('map'); setFilters({}); setEditing(null)
@@ -318,15 +338,18 @@ export default function App() {
         )}
 
         <main className="main view-fade" key={view}>
-          {view === 'map' && <MapView assets={filtered} sectorsPresent={sectorsPresent} onEdit={setEditing} />}
-          {view === 'dashboard' && <Dashboard assets={filtered} />}
-          {view === 'table' && <AssetTable assets={filtered} onEdit={setEditing} />}
-          {view === 'live' && <LiveView assets={visible} />}
-          {view === 'users' && admin && <UserAdmin currentUser={user} />}
+          <Suspense fallback={<ViewLoading />}>
+            {view === 'map' && <MapView assets={filtered} sectorsPresent={sectorsPresent} onEdit={setEditing} />}
+            {view === 'dashboard' && <Dashboard assets={filtered} />}
+            {view === 'table' && <AssetTable assets={filtered} onEdit={setEditing} />}
+            {view === 'live' && <LiveView assets={visible} />}
+            {view === 'users' && admin && <UserAdmin currentUser={user} />}
+          </Suspense>
         </main>
       </div>
 
       {toast && <div key={toast.key} className={'toast ' + toast.kind}>{toast.msg}</div>}
+      <DialogHost />
 
       {editing && (
         <AssetForm

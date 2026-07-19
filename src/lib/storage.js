@@ -26,6 +26,7 @@ function rowToAsset(r) {
     path: r.path || null,
     address: r.address || '',
     notes: r.notes || '',
+    photos: Array.isArray(r.photos) ? r.photos : [],
     createdBy: r.created_by,
     createdByName: r.created_by_name,
     createdByRole: r.created_by_role,
@@ -56,6 +57,7 @@ function assetToRow(a) {
     path: a.path && a.path.length ? a.path : null,
     address: a.address || null,
     notes: a.notes || null,
+    photos: Array.isArray(a.photos) && a.photos.length ? a.photos : null,
     created_by_name: a.createdByName || null,
     created_by_role: a.createdByRole || null,
   }
@@ -70,23 +72,26 @@ export async function listAssets() {
   return (data || []).map(rowToAsset)
 }
 
+// The photos column only exists after migration 0002 has been run; if it is
+// missing, drop the field and retry so plain saves keep working.
+const missingPhotosColumn = (e) => /'photos' column|photos.*schema cache/i.test(e?.message || '')
+
 // Insert (no id) or update (existing id). Returns the saved asset.
 export async function saveAsset(asset) {
-  if (asset.id) {
-    const { data, error } = await supabase
-      .from('assets')
-      .update({ ...assetToRow(asset), updated_at: new Date().toISOString() })
-      .eq('id', asset.id)
-      .select()
-      .single()
-    if (error) throw error
-    return rowToAsset(data)
+  const write = async (row) => {
+    if (asset.id) {
+      return supabase.from('assets')
+        .update({ ...row, updated_at: new Date().toISOString() })
+        .eq('id', asset.id).select().single()
+    }
+    return supabase.from('assets').insert(row).select().single()
   }
-  const { data, error } = await supabase
-    .from('assets')
-    .insert(assetToRow(asset))
-    .select()
-    .single()
+  const row = assetToRow(asset)
+  let { data, error } = await write(row)
+  if (error && missingPhotosColumn(error)) {
+    const { photos, ...rest } = row
+    ;({ data, error } = await write(rest))
+  }
   if (error) throw error
   return rowToAsset(data)
 }

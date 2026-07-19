@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BLOCK_NAMES } from '../data/howrah.js'
 import { ROLES, roleLabel, listUsers, createUser, deleteUser, resetPassword } from '../lib/auth.js'
+import { alertDialog, confirmDialog, promptDialog } from '../lib/dialogs.jsx'
 
 const BLANK = { name: '', username: '', password: '', role: 'gp', block: '', gp: '' }
 
@@ -34,23 +35,31 @@ export default function UserAdmin({ currentUser }) {
   }
 
   async function remove(u) {
-    if (!confirm(`Delete user “${u.username}”?`)) return
+    const ok = await confirmDialog({
+      title: 'Delete user', danger: true, okLabel: 'Delete',
+      message: `Delete user “${u.username}”? They will no longer be able to sign in.`,
+    })
+    if (!ok) return
     try {
       await deleteUser(u.id)
       reload()
     } catch (err) {
-      alert(err.message)
+      alertDialog({ title: 'Could not delete user', message: err.message })
     }
   }
 
   async function changePassword(u) {
-    const pw = prompt(`New password for “${u.username}” (min 4 chars):`)
+    const pw = await promptDialog({
+      title: 'Reset password', inputType: 'text', okLabel: 'Update',
+      message: `New password for “${u.username}” (min 4 characters):`,
+    })
     if (pw == null) return
+    if (pw.length < 4) { alertDialog({ message: 'Password must be at least 4 characters.' }); return }
     try {
       await resetPassword(u.id, pw)
-      alert('Password updated.')
+      alertDialog({ title: 'Done', message: `Password updated for “${u.username}”.` })
     } catch (err) {
-      alert(err.message)
+      alertDialog({ title: 'Could not update password', message: err.message })
     }
   }
 

@@ -85,6 +85,16 @@ export default function Dashboard({ assets }) {
 
   return (
     <div className="dash">
+      <div className="print-only print-head">
+        <b>Panchayat Asset Register — Howrah District</b>
+        <div>
+          Report generated {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+          {' '}· {assets.length} asset(s) · {formatINR(totals.amount)} total investment
+        </div>
+      </div>
+      <div className="dash-actions">
+        <button className="btn print-btn" onClick={() => window.print()}>🖨️ Print report</button>
+      </div>
       <div className="cards">
         <StatCard label="Total assets" value={totals.count} delay={0} />
         <StatCard label="Total investment" value={totals.amount} format={compactINR}

@@ -39,7 +39,14 @@ or the one-time first-admin bootstrap, may create users).
 > [`supabase/functions/admin-users/index.ts`](supabase/functions/admin-users/index.ts)),
 > then turn **Verify JWT = off** in that function's settings.
 
-### 4. Get your keys
+### 4. Enable asset photos (one-time)
+Run [`supabase/migrations/0002_photos.sql`](supabase/migrations/0002_photos.sql)
+in the **SQL Editor** the same way as step 2. It adds a `photos` column and a
+public `asset-photos` Storage bucket so users can attach up to 3 photos per
+asset. (The app works without this — photo upload just shows a message asking
+for the migration.)
+
+### 5. Get your keys
 **Project Settings → API**, copy:
 - **Project URL** → `VITE_SUPABASE_URL`
 - **anon public** key → `VITE_SUPABASE_ANON_KEY`

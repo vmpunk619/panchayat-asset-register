@@ -172,7 +172,7 @@ export default function LiveView({ assets }) {
             zoomControl={false} attributionControl={true}>
             <TileLayer
               attribution='&copy; OpenStreetMap &copy; CARTO'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             />
             {spotAsset && spotAsset.lat != null && (
               <FlyTo target={[Number(spotAsset.lat), Number(spotAsset.lng)]} />

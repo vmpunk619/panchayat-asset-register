@@ -1,14 +1,20 @@
-import { useMemo, useState } from 'react'
-import LocationPicker from './LocationPicker.jsx'
+import { Suspense, lazy, useMemo, useRef, useState } from 'react'
 import {
   BLOCK_NAMES, SECTOR_NAMES, FUNDS, DEPARTMENTS, LEVELS, sectorColor, sectorIcon, blockCenter,
 } from '../data/howrah.js'
 import { pathLengthKm, midpoint, formatKm } from '../lib/format.js'
+import { uploadAssetPhoto } from '../lib/photos.js'
+
+// Leaflet is heavy — load the picker only when the form opens.
+const LocationPicker = lazy(() => import('./LocationPicker.jsx'))
+
+const MAX_PHOTOS = 3
 
 const BLANK = {
   name: '', sector: '', level: LEVELS[0], block: '', gp: '', village: '',
   department: '', fundName: '', amount: '', startDate: '', endDate: '',
   geometry: 'point', lat: null, lng: null, path: null, address: '', notes: '',
+  photos: [],
 }
 
 export default function AssetForm({ initial, scope = {}, gpSuggestions = [], onSave, onCancel, onDelete }) {
@@ -26,7 +32,29 @@ export default function AssetForm({ initial, scope = {}, gpSuggestions = [], onS
     return seed
   })
   const [errors, setErrors] = useState({})
+  const [uploading, setUploading] = useState(false)
+  const [photoErr, setPhotoErr] = useState('')
+  const photoInputRef = useRef(null)
   const isEdit = Boolean(initial && initial.id)
+
+  const photos = Array.isArray(form.photos) ? form.photos : []
+
+  async function handlePhotoPick(e) {
+    const files = [...(e.target.files || [])].slice(0, MAX_PHOTOS - photos.length)
+    e.target.value = ''
+    if (!files.length) return
+    setPhotoErr('')
+    setUploading(true)
+    try {
+      const urls = []
+      for (const f of files) urls.push(await uploadAssetPhoto(f))
+      setForm((f) => ({ ...f, photos: [...(f.photos || []), ...urls].slice(0, MAX_PHOTOS) }))
+    } catch (err) {
+      setPhotoErr(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -245,15 +273,43 @@ export default function AssetForm({ initial, scope = {}, gpSuggestions = [], onS
                   )}
                 </div>
               </div>
-              <LocationPicker
-                mode={form.geometry}
-                lat={form.lat} lng={form.lng}
-                path={path}
-                onPoint={(lat, lng) => setForm((f) => ({ ...f, lat, lng }))}
-                onPath={(p) => setForm((f) => ({ ...f, path: p }))}
-              />
+              <Suspense fallback={<div className="pick-map" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="spinner" /></div>}>
+                <LocationPicker
+                  mode={form.geometry}
+                  lat={form.lat} lng={form.lng}
+                  path={path}
+                  onPoint={(lat, lng) => setForm((f) => ({ ...f, lat, lng }))}
+                  onPath={(p) => setForm((f) => ({ ...f, path: p }))}
+                />
+              </Suspense>
               {isLine && <div className="hint">Tip: click each bend of the road in order — the length updates automatically. The {sectorIcon(form.sector || 'Other')} icon will sit at the route's midpoint.</div>}
               {errors.location && <div className="error-text">{errors.location}</div>}
+            </div>
+
+            <div className="field full">
+              <label>Photos <span className="muted" style={{ textTransform: 'none' }}>(up to {MAX_PHOTOS})</span></label>
+              <div className="photo-grid">
+                {photos.map((url) => (
+                  <div className="photo-thumb" key={url}>
+                    <img src={url} alt="Asset photo" />
+                    <button type="button" className="photo-x" title="Remove photo"
+                      onClick={() => setForm((f) => ({ ...f, photos: (f.photos || []).filter((u) => u !== url) }))}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {photos.length < MAX_PHOTOS && (
+                  <button type="button" className="photo-add" disabled={uploading}
+                    onClick={() => photoInputRef.current?.click()}>
+                    {uploading ? <span className="spinner" /> : <span style={{ fontSize: 20 }}>＋</span>}
+                    {uploading ? 'Uploading…' : 'Add photo'}
+                  </button>
+                )}
+              </div>
+              <input ref={photoInputRef} type="file" accept="image/*" multiple
+                style={{ display: 'none' }} onChange={handlePhotoPick} />
+              {photoErr && <div className="error-text">{photoErr}</div>}
+              <div className="hint">JPG/PNG up to 5 MB each. Photos appear in the asset's map popup.</div>
             </div>
 
             <div className="field full">

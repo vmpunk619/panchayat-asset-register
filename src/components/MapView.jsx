@@ -1,6 +1,8 @@
-import { Fragment, useEffect, useMemo } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Polyline, Popup, Tooltip, useMap } from 'react-leaflet'
+import MarkerClusterGroup from 'react-leaflet-cluster'
 import L from 'leaflet'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
 import { DISTRICT, sectorColor, sectorIcon } from '../data/howrah.js'
 import { compactINR, fmtDate, pathLengthKm, formatKm } from '../lib/format.js'
 
@@ -20,6 +22,18 @@ function sectorMarker(sector) {
   })
   ICON_CACHE[sector] = icon
   return icon
+}
+
+// Cluster badge: count in a cyan circle, sized by how many assets it holds.
+function clusterIcon(cluster) {
+  const n = cluster.getChildCount()
+  const size = n >= 100 ? 48 : n >= 10 ? 42 : 36
+  return L.divIcon({
+    className: '',
+    html: `<div class="cluster-pin" style="width:${size}px;height:${size}px">${n}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  })
 }
 
 const isLine = (a) => a.geometry === 'line' && Array.isArray(a.path) && a.path.length >= 2
@@ -55,6 +69,7 @@ function Tip({ a }) {
 }
 
 function Details({ a, onEdit }) {
+  const photos = Array.isArray(a.photos) ? a.photos : []
   return (
     <div className="popup-asset">
       <b>{a.name || 'Unnamed asset'}</b>
@@ -63,6 +78,15 @@ function Details({ a, onEdit }) {
           {sectorIcon(a.sector)} {a.sector}
         </span>
       </div>
+      {photos.length > 0 && (
+        <div className="popup-photos">
+          {photos.map((url) => (
+            <a key={url} href={url} target="_blank" rel="noreferrer">
+              <img src={url} alt={a.name} loading="lazy" />
+            </a>
+          ))}
+        </div>
+      )}
       <div className="meta">
         <div>{a.level}</div>
         <div>{[a.gp, a.block].filter(Boolean).join(', ')}</div>
@@ -80,7 +104,54 @@ function Details({ a, onEdit }) {
   )
 }
 
+// Search box overlaid on the map: type, pick a match, the camera flies there.
+function MapSearch({ assets, map }) {
+  const [q, setQ] = useState('')
+  const [openList, setOpenList] = useState(false)
+
+  const matches = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (needle.length < 2) return []
+    return assets
+      .filter((a) => [a.name, a.village, a.gp, a.block, a.address]
+        .filter(Boolean).join(' ').toLowerCase().includes(needle))
+      .slice(0, 8)
+  }, [assets, q])
+
+  function go(a) {
+    setOpenList(false)
+    setQ(a.name)
+    if (!map) return
+    if (isLine(a)) map.flyToBounds(L.latLngBounds(a.path).pad(0.3), { maxZoom: 15, duration: 1.2 })
+    else map.flyTo([Number(a.lat), Number(a.lng)], 15, { duration: 1.2 })
+  }
+
+  return (
+    <div className="map-search">
+      <input
+        value={q}
+        placeholder="🔍 Find an asset…"
+        onChange={(e) => { setQ(e.target.value); setOpenList(true) }}
+        onFocus={() => setOpenList(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && matches.length) go(matches[0]) }}
+      />
+      {openList && matches.length > 0 && (
+        <div className="map-search-list">
+          {matches.map((a) => (
+            <button key={a.id} className="map-search-item" onClick={() => go(a)}>
+              <span className="map-search-ico" style={{ background: sectorColor(a.sector) }}>{sectorIcon(a.sector)}</span>
+              <span className="map-search-name">{a.name}</span>
+              <span className="map-search-where">{[a.gp, a.block].filter(Boolean).join(', ')}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function MapView({ assets, sectorsPresent, onEdit }) {
+  const [map, setMap] = useState(null)
   const shown = useMemo(
     () => assets.filter((a) => isLine(a) || (a.lat != null && a.lng != null && !Number.isNaN(Number(a.lat)))),
     [assets]
@@ -89,32 +160,38 @@ export default function MapView({ assets, sectorsPresent, onEdit }) {
 
   return (
     <div className="map-wrap" style={{ position: 'relative' }}>
-      <MapContainer center={DISTRICT.center} zoom={DISTRICT.zoom} style={{ height: '100%' }}>
+      <MapContainer center={DISTRICT.center} zoom={DISTRICT.zoom} style={{ height: '100%' }} ref={setMap}>
         <TileLayer
           attribution='&copy; OpenStreetMap contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <FitToAll assets={shown} />
 
-        {shown.map((a) => (
-          <Fragment key={a.id}>
-            {/* Linear assets (roads etc.) draw as a coloured route, hover for summary. */}
-            {isLine(a) && (
-              <Polyline positions={a.path}
-                pathOptions={{ color: sectorColor(a.sector), weight: 5, opacity: 0.85 }}>
-                <Tooltip sticky><Tip a={a} /></Tooltip>
-              </Polyline>
-            )}
-            {/* A sector icon sits at the point (or the route's midpoint) for click + legend. */}
-            {a.lat != null && a.lng != null && (
-              <Marker position={[Number(a.lat), Number(a.lng)]} icon={sectorMarker(a.sector)}>
-                <Tooltip direction="top" offset={[0, -10]} opacity={1}><Tip a={a} /></Tooltip>
-                <Popup><Details a={a} onEdit={onEdit} /></Popup>
-              </Marker>
-            )}
-          </Fragment>
+        {/* Linear assets (roads etc.) draw as a coloured route, hover for summary. */}
+        {shown.filter(isLine).map((a) => (
+          <Polyline key={'line-' + a.id} positions={a.path}
+            pathOptions={{ color: sectorColor(a.sector), weight: 5, opacity: 0.85 }}>
+            <Tooltip sticky><Tip a={a} /></Tooltip>
+          </Polyline>
         ))}
+
+        {/* Point markers cluster together when the map gets crowded. */}
+        <MarkerClusterGroup chunkedLoading maxClusterRadius={45}
+          iconCreateFunction={clusterIcon} showCoverageOnHover={false}>
+          {shown.map((a) => (
+            <Fragment key={a.id}>
+              {a.lat != null && a.lng != null && (
+                <Marker position={[Number(a.lat), Number(a.lng)]} icon={sectorMarker(a.sector)}>
+                  <Tooltip direction="top" offset={[0, -10]} opacity={1}><Tip a={a} /></Tooltip>
+                  <Popup><Details a={a} onEdit={onEdit} /></Popup>
+                </Marker>
+              )}
+            </Fragment>
+          ))}
+        </MarkerClusterGroup>
       </MapContainer>
+
+      <MapSearch assets={shown} map={map} />
 
       <div className="legend">
         <h4>Sectors ({mapped} mapped)</h4>
