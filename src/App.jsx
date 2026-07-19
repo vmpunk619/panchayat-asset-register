@@ -7,6 +7,7 @@ import AssetForm from './components/AssetForm.jsx'
 import Login from './components/Login.jsx'
 import UserAdmin from './components/UserAdmin.jsx'
 import LiveView from './components/LiveView.jsx'
+import Wallpaper from './components/Wallpaper.jsx'
 import { isConfigured } from './lib/supabaseClient.js'
 import { listAssets, saveAsset, deleteAsset, clearAll } from './lib/storage.js'
 import {
@@ -31,6 +32,7 @@ function inYearRange(a, from, to) {
 function Centered({ children }) {
   return (
     <div className="login-screen">
+      <Wallpaper />
       <div className="login-card">
         <div className="login-brand">
           <div className="login-logo">🏛️</div>
@@ -266,6 +268,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <Wallpaper />
       <div className="topbar">
         <div>
           <h1>Panchayat Asset Register</h1>
