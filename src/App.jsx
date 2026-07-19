@@ -50,7 +50,17 @@ export default function App() {
   const [filters, setFilters] = useState({})
   const [view, setView] = useState('map')
   const [editing, setEditing] = useState(null)
+  const [toast, setToast] = useState(null)
   const fileRef = useRef(null)
+  const toastTimer = useRef(null)
+
+  // Small self-dismissing feedback pill (bottom-centre).
+  function notify(msg, kind = 'ok') {
+    clearTimeout(toastTimer.current)
+    setToast({ msg, kind, key: Date.now() })
+    toastTimer.current = setTimeout(() => setToast(null), 3200)
+  }
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
 
   // Resolve the session once, and keep it in sync with sign-in/out.
   useEffect(() => {
@@ -127,13 +137,14 @@ export default function App() {
       await saveAsset(stamped)
       await reload()
       setEditing(null)
+      notify(data.id ? 'Asset updated ✓' : 'Asset added ✓')
     } catch (e) {
       alert('Could not save: ' + e.message)
     }
   }
   async function handleDelete(id) {
     if (!confirm('Delete this asset permanently?')) return
-    try { await deleteAsset(id); await reload(); setEditing(null) }
+    try { await deleteAsset(id); await reload(); setEditing(null); notify('Asset deleted', 'warn') }
     catch (e) { alert('Could not delete: ' + e.message) }
   }
   async function handleLoadSample() {
@@ -141,10 +152,12 @@ export default function App() {
     try {
       for (const a of SAMPLE_ASSETS) await saveAsset({ ...a, createdByName: user.name, createdByRole: user.role })
       await reload()
+      notify(`${SAMPLE_ASSETS.length} sample assets added ✓`)
     } catch (e) { alert('Could not add samples: ' + e.message) }
   }
   function handleExportCSV() {
     download('howrah-assets.csv', toCSV(filtered), 'text/csv')
+    notify(`Exported ${filtered.length} asset(s) to CSV ✓`)
   }
   function handleTemplate() {
     const examples = [
@@ -200,7 +213,8 @@ export default function App() {
           try { await saveAsset(row); ok++ } catch { fail++ }
         }
         await reload()
-        alert(`Imported ${ok} asset(s)${fail ? `, ${fail} failed (check tier/jurisdiction & required fields)` : ''}.`)
+        if (fail) alert(`Imported ${ok} asset(s), ${fail} failed (check tier/jurisdiction & required fields).`)
+        else notify(`Imported ${ok} asset(s) ✓`)
       } catch (err) {
         alert('Could not parse file: ' + err.message)
       }
@@ -210,7 +224,7 @@ export default function App() {
   }
   async function handleClearAll() {
     if (!confirm('Erase ALL assets you can access? Export a backup first if needed.')) return
-    try { await clearAll(); await reload() }
+    try { await clearAll(); await reload(); notify('All data erased', 'warn') }
     catch (e) { alert('Could not erase: ' + e.message) }
   }
   async function handleLogout() {
@@ -283,7 +297,7 @@ export default function App() {
             <Filters filters={filters} setFilters={setFilters} allAssets={visible} shownCount={filtered.length} user={user} />
             <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '16px 0' }} />
             <div className="muted" style={{ lineHeight: 1.6 }}>
-              {loading ? 'Loading assets…' : 'Data is stored in your Supabase project.'}
+              {loading ? <><span className="spinner" /> Loading assets…</> : 'Data is stored in your Supabase project.'}
               {admin && !loading && assets.length === 0 && (
                 <> <button className="link" onClick={handleLoadSample}>Load sample data</button> to explore.</>
               )}
@@ -294,13 +308,15 @@ export default function App() {
           </aside>
         )}
 
-        <main className="main">
+        <main className="main view-fade" key={view}>
           {view === 'map' && <MapView assets={filtered} sectorsPresent={sectorsPresent} onEdit={setEditing} />}
           {view === 'dashboard' && <Dashboard assets={filtered} />}
           {view === 'table' && <AssetTable assets={filtered} onEdit={setEditing} />}
           {view === 'users' && admin && <UserAdmin currentUser={user} />}
         </main>
       </div>
+
+      {toast && <div key={toast.key} className={'toast ' + toast.kind}>{toast.msg}</div>}
 
       {editing && (
         <AssetForm

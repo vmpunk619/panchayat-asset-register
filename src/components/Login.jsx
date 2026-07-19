@@ -5,20 +5,23 @@ import { login, createUser, hasAdmin } from '../lib/auth.js'
 // to a one-time "create administrator" setup; afterwards it's a login form.
 export default function Login({ onAuthed }) {
   const [needsSetup, setNeedsSetup] = useState(null) // null = still checking
+  const [connError, setConnError] = useState(false)
   const [username, setUsername] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    let mounted = true
+  function checkServer() {
+    setConnError(false)
+    setNeedsSetup(null)
     hasAdmin()
-      .then((h) => mounted && setNeedsSetup(!h))
-      .catch(() => mounted && setError('Could not reach the server. Check your Supabase configuration.'))
-    return () => { mounted = false }
-  }, [])
+      .then((h) => setNeedsSetup(!h))
+      .catch(() => setConnError(true))
+  }
+  useEffect(() => { checkServer() }, [])
 
   async function submit(e) {
     e.preventDefault()
@@ -41,15 +44,34 @@ export default function Login({ onAuthed }) {
     }
   }
 
+  const brand = (
+    <div className="login-brand">
+      <div className="login-logo">🏛️</div>
+      <div>
+        <h1>Panchayat Asset Register</h1>
+        <div className="muted">Howrah District</div>
+      </div>
+    </div>
+  )
+
   if (needsSetup === null) {
     return (
       <div className="login-screen">
         <div className="login-card">
-          <div className="login-brand">
-            <div className="login-logo">🏛️</div>
-            <div><h1>Panchayat Asset Register</h1><div className="muted">Howrah District</div></div>
-          </div>
-          <div className="muted">{error || 'Connecting to the server…'}</div>
+          {brand}
+          {connError ? (
+            <>
+              <div className="error-text" style={{ fontSize: 13 }}>
+                Could not reach the server. Check your internet connection and
+                Supabase configuration.
+              </div>
+              <button className="btn-primary" style={{ width: '100%', marginTop: 14 }} onClick={checkServer}>
+                Retry
+              </button>
+            </>
+          ) : (
+            <div className="muted"><span className="spinner" /> Connecting to the server…</div>
+          )}
         </div>
       </div>
     )
@@ -58,13 +80,7 @@ export default function Login({ onAuthed }) {
   return (
     <div className="login-screen">
       <form className="login-card" onSubmit={submit}>
-        <div className="login-brand">
-          <div className="login-logo">🏛️</div>
-          <div>
-            <h1>Panchayat Asset Register</h1>
-            <div className="muted">Howrah District</div>
-          </div>
-        </div>
+        {brand}
 
         {needsSetup ? (
           <>
@@ -104,20 +120,29 @@ export default function Login({ onAuthed }) {
             </div>
             <div className="field">
               <label htmlFor="login-password">Password</label>
-              <input id="login-password" name="password" type="password" autoComplete="current-password"
-                value={password} onChange={(e) => setPassword(e.target.value)} />
+              <div className="pw-wrap">
+                <input id="login-password" name="password" type={showPw ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password} onChange={(e) => setPassword(e.target.value)} />
+                <button type="button" className="pw-toggle" tabIndex={-1}
+                  aria-label={showPw ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPw((s) => !s)}>
+                  {showPw ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
           </>
         )}
 
-        {error && <div className="error-text" style={{ marginTop: 4 }}>{error}</div>}
+        {error && <div key={error} className="error-text shake" style={{ marginTop: 4 }}>{error}</div>}
 
         <button className="btn-primary" type="submit" disabled={busy} style={{ width: '100%', marginTop: 12 }}>
-          {busy ? 'Please wait…' : needsSetup ? 'Create account & continue' : 'Sign in'}
+          {busy ? <><span className="spinner light" /> Please wait…</> : needsSetup ? 'Create account & continue' : 'Sign in'}
         </button>
 
         <div className="hint" style={{ marginTop: 14 }}>
-          Accounts are created by the administrator. Data is stored locally in this browser.
+          Accounts are created by the administrator. Data is stored securely in
+          the district's shared register.
         </div>
       </form>
     </div>
