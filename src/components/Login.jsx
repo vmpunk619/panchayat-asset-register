@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { login, createUser, hasAdmin } from '../lib/auth.js'
-import Wallpaper from './Wallpaper.jsx'
 
 // Shown when nobody is logged in. On a fresh install (no admin yet) it switches
 // to a one-time "create administrator" setup; afterwards it's a login form.
@@ -58,7 +57,6 @@ export default function Login({ onAuthed }) {
   if (needsSetup === null) {
     return (
       <div className="login-screen">
-        <Wallpaper />
         <div className="login-card">
           {brand}
           {connError ? (
@@ -81,7 +79,6 @@ export default function Login({ onAuthed }) {
 
   return (
     <div className="login-screen">
-      <Wallpaper />
       <form className="login-card" onSubmit={submit}>
         {brand}
 

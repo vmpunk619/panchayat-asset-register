@@ -99,7 +99,7 @@ export default function UserAdmin({ currentUser }) {
               </div>
             )}
             {error && <div className="error-text">{error}</div>}
-            {ok && <div style={{ color: '#15803d', fontSize: 12, marginTop: 6 }}>{ok}</div>}
+            {ok && <div style={{ color: 'var(--success)', fontSize: 12, marginTop: 6, fontWeight: 600 }}>{ok}</div>}
             <button className="btn-primary" type="submit" disabled={busy} style={{ marginTop: 12 }}>
               {busy ? 'Creating…' : 'Create user'}
             </button>
