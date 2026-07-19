@@ -6,6 +6,7 @@ import AssetTable from './components/AssetTable.jsx'
 import AssetForm from './components/AssetForm.jsx'
 import Login from './components/Login.jsx'
 import UserAdmin from './components/UserAdmin.jsx'
+import LiveView from './components/LiveView.jsx'
 import { isConfigured } from './lib/supabaseClient.js'
 import { listAssets, saveAsset, deleteAsset, clearAll } from './lib/storage.js'
 import {
@@ -92,6 +93,14 @@ export default function App() {
 
   const visible = useMemo(() => scopeAssets(user, assets), [user, assets])
   const admin = canManageUsers(user)
+
+  // The Live board keeps itself fresh: re-fetch periodically while it's shown.
+  useEffect(() => {
+    if (view !== 'live' || !user) return
+    const id = setInterval(() => { reload() }, 45000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, user])
 
   const filtered = useMemo(() => {
     const q = (filters.q || '').trim().toLowerCase()
@@ -252,8 +261,8 @@ export default function App() {
       : user.role === 'samiti' ? user.block
         : 'Entire district'
 
-  const tabs = ['map', 'dashboard', 'table', ...(admin ? ['users'] : [])]
-  const tabLabel = { map: 'Map', dashboard: 'Dashboard', table: 'Table', users: 'Users' }
+  const tabs = ['map', 'dashboard', 'table', 'live', ...(admin ? ['users'] : [])]
+  const tabLabel = { map: 'Map', dashboard: 'Dashboard', table: 'Table', live: '🔴 Live', users: 'Users' }
 
   return (
     <div className="app">
@@ -284,7 +293,7 @@ export default function App() {
       </div>
 
       <div className="body">
-        {view !== 'users' && (
+        {view !== 'users' && view !== 'live' && (
           <aside className="sidebar">
             {loadError && <div className="warn-banner">⚠ {loadError}</div>}
             {needsLocation.length > 0 && (
@@ -312,6 +321,7 @@ export default function App() {
           {view === 'map' && <MapView assets={filtered} sectorsPresent={sectorsPresent} onEdit={setEditing} />}
           {view === 'dashboard' && <Dashboard assets={filtered} />}
           {view === 'table' && <AssetTable assets={filtered} onEdit={setEditing} />}
+          {view === 'live' && <LiveView assets={visible} />}
           {view === 'users' && admin && <UserAdmin currentUser={user} />}
         </main>
       </div>

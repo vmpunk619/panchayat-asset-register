@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { sectorColor, sectorIcon } from '../data/howrah.js'
 import { compactINR, formatINR, yearOf } from '../lib/format.js'
+import useCountUp from '../lib/useCountUp.js'
 
 function aggregate(assets, keyFn) {
   const map = new Map()
@@ -13,28 +14,6 @@ function aggregate(assets, keyFn) {
     map.set(key, cur)
   })
   return [...map.values()].sort((a, b) => b.amount - a.amount)
-}
-
-// Animate a number towards its target (eased), re-running on every change.
-function useCountUp(target, duration = 650) {
-  const [val, setVal] = useState(0)
-  const prev = useRef(0)
-  useEffect(() => {
-    const from = prev.current
-    prev.current = target
-    if (from === target) return
-    let raf
-    const t0 = performance.now()
-    const tick = (t) => {
-      const p = Math.min(1, (t - t0) / duration)
-      const eased = 1 - Math.pow(1 - p, 3)
-      setVal(from + (target - from) * eased)
-      if (p < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target, duration])
-  return val
 }
 
 function StatCard({ label, value, format, sub, delay = 0 }) {
